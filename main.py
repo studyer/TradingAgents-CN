@@ -8,12 +8,12 @@ logger = get_logger('default')
 
 # Create a custom config
 config = DEFAULT_CONFIG.copy()
-config["llm_provider"] = "google"  # Use a different model
-config["backend_url"] = "https://generativelanguage.googleapis.com/v1beta"  # Use a different backend
-config["deep_think_llm"] = "gemini-2.0-flash"  # Use a different model
-config["quick_think_llm"] = "gemini-2.0-flash"  # Use a different model
-config["max_debate_rounds"] = 1  # Increase debate rounds
-config["online_tools"] = True  # Increase debate rounds
+config["llm_provider"] = "openai"  # Use DeepSeek-compatible
+config["backend_url"] = "https://api.deepseek.com/v1"
+config["deep_think_llm"] = "deepseek-v4-flash"
+config["quick_think_llm"] = "deepseek-v4-flash"
+config["max_debate_rounds"] = 1
+config["online_tools"] = True
 
 # Initialize with custom config
 ta = TradingAgentsGraph(debug=True, config=config)
