@@ -22,6 +22,15 @@ logger = get_logger('agents')
 # 导入 MongoDB 缓存适配器
 from .cache.mongodb_cache_adapter import get_mongodb_cache_adapter, get_stock_data_with_fallback, get_financial_data_with_fallback
 
+def _run_async(coro):
+    """在独立线程中运行异步协程，避免事件循环冲突"""
+    import asyncio
+    import concurrent.futures
+    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as _pool:
+        return _pool.submit(asyncio.run, coro).result()
+
+
+
 
 class OptimizedChinaDataProvider:
     """优化的A股数据提供器 - 集成缓存和Tushare数据接口"""
@@ -902,12 +911,12 @@ class OptimizedChinaDataProvider:
 
             if akshare_provider.connected:
                 # AKShare的get_financial_data是异步方法，需要使用asyncio运行
-                financial_data = asyncio.run(akshare_provider.get_financial_data(symbol))
+                financial_data = _run_async(akshare_provider.get_financial_data(symbol))
 
                 if financial_data and any(not v.empty if hasattr(v, 'empty') else bool(v) for v in financial_data.values()):
                     logger.info(f"✅ AKShare财务数据获取成功: {symbol}")
                     # 获取股票基本信息（也是异步方法）
-                    stock_info = asyncio.run(akshare_provider.get_stock_basic_info(symbol))
+                    stock_info = _run_async(akshare_provider.get_stock_basic_info(symbol))
 
                     # 解析AKShare财务数据
                     logger.debug(f"🔧 调用AKShare解析函数，股价: {price_value}")
@@ -936,13 +945,13 @@ class OptimizedChinaDataProvider:
                 return None
 
             # 获取财务数据（异步方法）
-            financial_data = asyncio.run(provider.get_financial_data(symbol))
+            financial_data = _run_async(provider.get_financial_data(symbol))
             if not financial_data:
                 logger.debug(f"未获取到{symbol}的财务数据")
                 return None
 
             # 获取股票基本信息（异步方法）
-            stock_info = asyncio.run(provider.get_stock_basic_info(symbol))
+            stock_info = _run_async(provider.get_stock_basic_info(symbol))
 
             # 解析Tushare财务数据
             metrics = self._parse_financial_data(financial_data, stock_info, price_value)

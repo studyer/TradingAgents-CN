@@ -9,6 +9,15 @@ from datetime import datetime, timedelta
 from typing import Optional, Tuple, List
 import pandas as pd
 
+def _run_async(coro):
+    """在独立线程中运行异步协程，避免事件循环冲突"""
+    import asyncio
+    import concurrent.futures
+    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as _pool:
+        return _pool.submit(asyncio.run, coro).result()
+
+
+
 logger = logging.getLogger(__name__)
 
 
@@ -196,7 +205,7 @@ class DataCompletenessChecker:
                 
                 provider = TushareProvider()
                 if provider.is_available():
-                    latest_date = asyncio.run(provider.find_latest_trade_date())
+                    latest_date = _run_async(provider.find_latest_trade_date())
                     if latest_date:
                         return latest_date
             

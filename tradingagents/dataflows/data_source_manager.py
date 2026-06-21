@@ -6,7 +6,9 @@
 
 import os
 import time
-from typing import Dict, List, Optional, Any
+import asyncio
+import concurrent.futures
+from typing import Any, Coroutine, Dict, List, Optional
 from enum import Enum
 import warnings
 import pandas as pd
@@ -52,6 +54,17 @@ class USDataSource(Enum):
 
 
 
+
+
+def _run_async(coro) -> Any:
+    """在独立线程中运行异步协程，避免与 langgraph 已有事件循环冲突
+    
+    Python 3.14 中 asyncio.run() 在已有事件循环内会抛出
+    'asyncio.run() cannot be called from a running event loop'，
+    此函数在新线程中启动全新事件循环来规避此问题。
+    """
+    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as _pool:
+        return _pool.submit(asyncio.run, coro).result()
 
 
 class DataSourceManager:
@@ -1201,7 +1214,7 @@ class DataSourceManager:
                 provider = self._get_tushare_adapter()
                 if provider:
                     import asyncio
-                    stock_info = asyncio.run(provider.get_stock_basic_info(symbol))
+                    stock_info = _run_async(provider.get_stock_basic_info(symbol))
                     stock_name = stock_info.get('name', f'股票{symbol}') if stock_info else f'股票{symbol}'
                 else:
                     stock_name = f'股票{symbol}'
@@ -1219,14 +1232,14 @@ class DataSourceManager:
 
             # 使用异步方法获取历史数据
             import asyncio
-            data = asyncio.run(provider.get_historical_data(symbol, start_date, end_date))
+            data = _run_async(provider.get_historical_data(symbol, start_date, end_date))
 
             if data is not None and not data.empty:
                 # 保存到缓存
                 self._save_to_cache(symbol, data, start_date, end_date)
 
                 # 获取股票基本信息（异步）
-                stock_info = asyncio.run(provider.get_stock_basic_info(symbol))
+                stock_info = _run_async(provider.get_stock_basic_info(symbol))
                 stock_name = stock_info.get('name', f'股票{symbol}') if stock_info else f'股票{symbol}'
 
                 # 格式化返回
@@ -1263,13 +1276,13 @@ class DataSourceManager:
             provider = get_akshare_provider()
 
             import asyncio
-            data = asyncio.run(provider.get_historical_data(symbol, start_date, end_date, period))
+            data = _run_async(provider.get_historical_data(symbol, start_date, end_date, period))
 
             duration = time.time() - start_time
 
             if data is not None and not data.empty:
                 # 获取股票基本信息
-                stock_info = asyncio.run(provider.get_stock_basic_info(symbol))
+                stock_info = _run_async(provider.get_stock_basic_info(symbol))
                 stock_name = stock_info.get('name', f'股票{symbol}') if stock_info else f'股票{symbol}'
 
                 # 调用统一的格式化方法（包含技术指标计算）
@@ -1295,11 +1308,11 @@ class DataSourceManager:
         provider = get_baostock_provider()
 
         import asyncio
-        data = asyncio.run(provider.get_historical_data(symbol, start_date, end_date, period))
+        data = _run_async(provider.get_historical_data(symbol, start_date, end_date, period))
 
         if data is not None and not data.empty:
             # 获取股票基本信息
-            stock_info = asyncio.run(provider.get_stock_basic_info(symbol))
+            stock_info = _run_async(provider.get_stock_basic_info(symbol))
             stock_name = stock_info.get('name', f'股票{symbol}') if stock_info else f'股票{symbol}'
 
             # 调用统一的格式化方法（包含技术指标计算）
