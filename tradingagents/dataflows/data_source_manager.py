@@ -1419,8 +1419,96 @@ class DataSourceManager:
                     logger.error(f"❌ [备用数据源-{source.value}] 获取失败: {symbol}, 错误: {e}")
                     continue
 
+        # 🕷️ Trader爬虫兜底 — 当AKShare/Tushare/BaoStock全部失败时
+        try:
+            logger.info(f"🕷️ [Trader爬虫] 尝试从Trader项目获取数据: {symbol}")
+            result = self._get_trader_crawler_data(symbol, start_date, end_date, period)
+            if result and "❌" not in result:
+                logger.info(f"✅ [Trader爬虫] 成功获取{period}数据: {symbol}")
+                return result, "trader_crawler"
+        except Exception as e:
+            logger.error(f"❌ [Trader爬虫] 获取失败: {symbol}, 错误: {e}")
+
         logger.error(f"❌ [所有数据源失败] 无法获取{period}数据: {symbol}")
         return f"❌ 所有数据源都无法获取{symbol}的{period}数据", None
+
+    def _get_trader_crawler_data(self, symbol: str, start_date: str, end_date: str, period: str = "daily") -> str:
+        """
+        使用Trader项目爬虫获取数据 — 最终兜底
+        链路: Trader缓存(baostock) → DataHub(腾讯HTTP) → Playwright爬虫
+        """
+        import sys as _sys
+        _trader_root = "/home/ecs-user/work/trader"
+        if _trader_root not in _sys.path:
+            _sys.path.insert(0, _trader_root)
+
+        code = symbol.replace("sh.", "").replace("sz.", "").replace("SH.", "").replace("SZ.", "")
+
+        # ── Tier 1: Trader的DataLoader缓存（baostock历史数据）──
+        try:
+            from trader.data.loader import loader as _loader
+            cache = _loader.cache
+            stock_df = cache[cache["code"] == code].copy()
+            if len(stock_df) > 0:
+                stock_df = stock_df.sort_values("date")
+                stock_df = stock_df[(stock_df["date"] >= pd.to_datetime(start_date)) &
+                                    (stock_df["date"] <= pd.to_datetime(end_date))]
+                if len(stock_df) > 0:
+                    # 获取股票名称
+                    stock_name = stock_df["name"].iloc[0] if "name" in stock_df.columns else f"股票{code}"
+                    logger.info(f"✅ [Trader缓存] 命中历史数据: {code} ({len(stock_df)}条)")
+                    return self._format_stock_data_response(stock_df, code, stock_name, start_date, end_date)
+        except Exception as e:
+            logger.warning(f"⚠️ [Trader缓存] 未命中: {e}")
+
+        # ── Tier 2: DataHub爬虫（腾讯HTTP → Playwright → AKShare）──
+        try:
+            from trader.data.fallback import get_hub as _get_hub
+            hub = _get_hub()
+            quote = hub.get_live_quote(code)
+            if quote and quote.get("price"):
+                basic_info = (
+                    f"📊 股票{code} - 爬虫实时行情\n"
+                    f"数据来源: Trader爬虫\n"
+                    f"股价: ¥{quote['price']:.2f}\n"
+                    f"涨跌幅: {quote.get('change_pct', 'N/A')}%\n"
+                    f"今开: ¥{quote.get('open', 'N/A')}\n"
+                    f"最高: ¥{quote.get('high', 'N/A')}\n"
+                    f"最低: ¥{quote.get('low', 'N/A')}\n"
+                    f"名称: {quote.get('name', '')}\n"
+                    f"成交量: {quote.get('volume', 'N/A')}\n"
+                    f"换手率: {quote.get('turnover', 'N/A')}%\n"
+                    f"⚠️ 注: 爬虫仅获取实时行情，缺少历史K线数据"
+                )
+                logger.info(f"✅ [Trader爬虫] 实时行情命中: {code} ¥{quote['price']}")
+                return basic_info
+        except Exception as e:
+            logger.warning(f"⚠️ [Trader爬虫-DataHub] 失败: {e}")
+
+        # ── Tier 3: EastMoney Playwright爬虫（直接抓取）──
+        try:
+            from trader.data.crawler import fetch_quote as _crawl_quote
+            cq = _crawl_quote(code)
+            if cq and cq.get("price"):
+                basic_info = (
+                    f"📊 股票{code} - Playwright爬虫实时行情\n"
+                    f"数据来源: EastMoney Playwright\n"
+                    f"股价: ¥{cq['price']:.2f}\n"
+                    f"涨跌幅: {cq.get('change_pct', 'N/A')}%\n"
+                    f"今开: ¥{cq.get('open', 'N/A')}\n"
+                    f"最高: ¥{cq.get('high', 'N/A')}\n"
+                    f"最低: ¥{cq.get('low', 'N/A')}\n"
+                    f"名称: {cq.get('name', '')}\n"
+                    f"成交量: {cq.get('volume', 'N/A')}\n"
+                    f"换手率: {cq.get('turnover', 'N/A')}%\n"
+                    f"⚠️ 注: 爬虫仅获取实时行情，缺少历史K线数据"
+                )
+                logger.info(f"✅ [Playwright爬虫] 命中: {code} ¥{cq['price']}")
+                return basic_info
+        except Exception as e:
+            logger.warning(f"⚠️ [Playwright爬虫] 失败: {e}")
+
+        return f"❌ Trader爬虫也无法获取{code}的数据"
 
     def get_stock_info(self, symbol: str) -> Dict:
         """
