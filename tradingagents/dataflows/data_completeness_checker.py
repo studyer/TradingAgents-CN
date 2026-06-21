@@ -196,12 +196,7 @@ class DataCompletenessChecker:
                 
                 provider = TushareProvider()
                 if provider.is_available():
-                    loop = asyncio.get_event_loop()
-                    if loop.is_closed():
-                        loop = asyncio.new_event_loop()
-                        asyncio.set_event_loop(loop)
-                    
-                    latest_date = loop.run_until_complete(provider.find_latest_trade_date())
+                    latest_date = asyncio.run(provider.find_latest_trade_date())
                     if latest_date:
                         return latest_date
             
