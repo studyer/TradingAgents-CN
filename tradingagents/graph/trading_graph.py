@@ -1003,13 +1003,8 @@ class TradingAgentsGraph:
                             current_node_start = time.time()
                             break
 
-                    # 累积状态更新
-                    if final_state is None:
-                        final_state = init_agent_state.copy()
-                    for node_name, node_update in chunk.items():
-                        if not node_name.startswith('__'):
-                            if isinstance(node_update, dict):
-                                final_state.update(node_update)
+                    # values模式: chunk就是完整状态，直接取最后一个
+                    final_state = chunk
 
         # 记录最后一个节点的时间
         if current_node_name and current_node_start:
