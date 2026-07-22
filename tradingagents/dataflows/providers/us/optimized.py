@@ -208,6 +208,20 @@ class OptimizedUSDataProvider:
                             logger.info(f"✅ [数据来源: API调用成功-Yahoo Finance] Yahoo Finance港股数据获取成功: {symbol}")
                         else:
                             logger.error(f"❌ [数据来源: API失败-Yahoo Finance] Yahoo Finance港股数据为空: {symbol}")
+                elif market_info.get('is_china'):
+                    # A股使用国内数据源（akshare优先）
+                    logger.info(f"🇨🇳 [数据来源: API调用-国内源] 尝试使用国内数据源获取A股数据: {symbol}")
+                    try:
+                        from tradingagents.dataflows.interface import get_china_stock_data_unified
+                        cn_data_text = get_china_stock_data_unified(symbol, start_date, end_date)
+                        if cn_data_text and "❌" not in cn_data_text:
+                            formatted_data = cn_data_text
+                            data_source = "akshare_cn"
+                            logger.info(f"✅ [数据来源: API调用成功-国内源] 国内数据源获取成功: {symbol}")
+                        else:
+                            raise Exception("国内数据源返回空或错误")
+                    except Exception as e:
+                        logger.error(f"⚠️ [数据来源: API失败-国内源] 国内数据源获取失败: {e}")
                 else:
                     # 美股使用Yahoo Finance
                     logger.info(f"🇺🇸 [数据来源: API调用-Yahoo Finance] 从Yahoo Finance API获取美股数据: {symbol}")

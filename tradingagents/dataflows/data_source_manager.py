@@ -2476,8 +2476,8 @@ class USDataSourceManager:
             return result
         except Exception as e:
             logger.warning(f"⚠️ 从数据库读取启用的数据源失败: {e}")
-            # 默认全部启用
-            return ['yfinance', 'alpha_vantage', 'finnhub']
+            # 默认不启用任何国外数据源（国内优先 akshare）
+            return []
 
     def _get_datasource_configs_from_db(self) -> dict:
         """从数据库读取数据源配置（包括 API Key）"""
